@@ -265,3 +265,17 @@ class Radio:
             raise CATError(
                 f"Mode mismatch after set: sent {mode!r}, radio reports {actual!r}"
             )
+
+    def get_status(self) -> dict:
+        """Return a snapshot of key radio state over a single connection.
+
+        Queries frequency and mode in one session to avoid the overhead of
+        opening the serial port twice.
+
+        Returns:
+            Dict with keys ``frequency_mhz`` (float) and ``mode`` (str).
+        """
+        return {
+            "frequency_mhz": self.get_frequency(),
+            "mode": self.get_mode(),
+        }

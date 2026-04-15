@@ -4,24 +4,27 @@ Commands
 --------
   init            Detect serial ports and save connection settings.
 
-  get frequency   Read the current VFO-A frequency from the radio.
-  get mode        Read the current operating mode.
+  get frequency       Read the current VFO-A frequency from the radio.
+  get mode            Read the current operating mode.
+  get status          Read frequency and mode in a single query.
 
-  set frequency   Set the VFO-A frequency.
-  set mode        Set the operating mode.
+  set frequency       Set the VFO-A frequency.
+  set mode            Set the operating mode.
 
 Usage
 -----
   cat991a init
-  cat991a get frequency
-  cat991a get mode
+  cat991a get status
+  cat991a get --json status
   cat991a set frequency 443.716
   cat991a set mode FM
 
-Run any command with --help for details:
-  cat991a get --help
-  cat991a set mode --help
+Run any command with -h for details:
+  cat991a get -h
+  cat991a set mode -h
 """
+
+import json as json_mod
 
 import click
 from serial.tools import list_ports
@@ -51,8 +54,8 @@ def cli(ctx: click.Context, debug: bool) -> None:
     \b
     Examples:
       cat991a init
-      cat991a get frequency
-      cat991a get mode
+      cat991a get status
+      cat991a get --json status
       cat991a set frequency 443.716
       cat991a set mode FM
 
@@ -139,14 +142,25 @@ def init() -> None:
 # ---------------------------------------------------------------------------
 
 @cli.group(context_settings=CONTEXT_SETTINGS)
-def get() -> None:
+@click.option("--json", "as_json", is_flag=True, default=False,
+              help="Output as JSON instead of plain text.")
+@click.pass_context
+def get(ctx: click.Context, as_json: bool) -> None:
     """Read values from the radio.
 
     \b
     Available items:
       frequency   Current VFO-A frequency in MHz
       mode        Current operating mode (e.g. FM, USB, CW)
+      status      Frequency and mode in one query
+
+    \b
+    Add --json to get machine-readable output:
+      cat991a get --json status
+      cat991a get --json frequency
     """
+    ctx.ensure_object(dict)
+    ctx.obj["as_json"] = as_json
 
 
 @get.command("frequency", context_settings=CONTEXT_SETTINGS)
@@ -174,7 +188,10 @@ def get_frequency(ctx: click.Context) -> None:
     except Exception as exc:
         raise click.ClickException(f"Connection error: {exc}")
 
-    click.echo(f"{freq_mhz:.6f} MHz")
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"frequency_mhz": freq_mhz}))
+    else:
+        click.echo(f"{freq_mhz:.6f} MHz")
 
 
 @get.command("mode", context_settings=CONTEXT_SETTINGS)
@@ -203,7 +220,48 @@ def get_mode(ctx: click.Context) -> None:
     except Exception as exc:
         raise click.ClickException(f"Connection error: {exc}")
 
-    click.echo(mode)
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"mode": mode}))
+    else:
+        click.echo(mode)
+
+
+@get.command("status", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def get_status(ctx: click.Context) -> None:
+    """Read frequency and mode in a single query.
+
+    Opens one connection and fetches all values, making it faster than
+    running get frequency and get mode separately.
+
+    \b
+    Examples:
+        $ cat991a get status
+        Frequency: 443.716000 MHz
+        Mode:      FM
+
+        $ cat991a get --json status
+        {"frequency_mhz": 443.716, "mode": "FM"}
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            status = radio.get_status()
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps(status))
+    else:
+        click.echo(f"Frequency: {status['frequency_mhz']:.6f} MHz")
+        click.echo(f"Mode:      {status['mode']}")
 
 
 # ---------------------------------------------------------------------------
