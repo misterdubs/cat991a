@@ -61,46 +61,100 @@ Options:
   -h, --help  Show this message and exit.
 ```
 
-### get — read values from the radio
-
-| Command | Description |
-|---|---|
-| `cat991a get frequency` | Read the current VFO-A frequency |
-| `cat991a get mode` | Read the current operating mode |
-
-```bash
-$ cat991a get frequency
-443.716000 MHz
-
-$ cat991a get mode
-FM
-```
-
-### set — write values to the radio
-
-| Command | Description |
-|---|---|
-| `cat991a set frequency <MHz>` | Set VFO-A to a frequency in MHz |
-| `cat991a set mode <mode>` | Set the operating mode |
-
-```bash
-$ cat991a set frequency 146.520
-Frequency set to 146.520000 MHz
-
-$ cat991a set mode USB
-Mode set to USB
-```
-
-**Valid modes:** `LSB`, `USB`, `CW`, `CW-R`, `AM`, `AM-N`, `FM`, `FM-N`, `RTTY-LSB`, `RTTY-USB`, `DATA-LSB`, `DATA-USB`, `DATA-FM`, `C4FM`
-
-### Getting help
+Use `-h` with any command or subcommand for details:
 
 ```bash
 cat991a -h
 cat991a get -h
 cat991a set -h
 cat991a set frequency -h
-cat991a set mode -h
+```
+
+---
+
+### get — read values from the radio
+
+All `get` commands accept `--json` for machine-readable output:
+
+```bash
+cat991a get --json status
+cat991a get --json frequency
+```
+
+| Command | Description |
+|---|---|
+| `cat991a get status` | Frequency, mode, shift, and CTCSS in one query |
+| `cat991a get frequency` | VFO-A frequency in MHz |
+| `cat991a get mode` | Operating mode |
+| `cat991a get shift` | Repeater shift direction |
+| `cat991a get ctcss-mode` | CTCSS/tone-squelch mode |
+| `cat991a get ctcss-tone` | CTCSS tone frequency in Hz |
+
+```bash
+$ cat991a get status
+Frequency:  443.716000 MHz
+Mode:       FM
+Shift:      +
+CTCSS:      ENC (88.5 Hz)
+
+$ cat991a get frequency
+443.716000 MHz
+
+$ cat991a get mode
+FM
+
+$ cat991a get shift
++
+
+$ cat991a get ctcss-mode
+ENC
+
+$ cat991a get ctcss-tone
+88.5 Hz
+```
+
+---
+
+### set — write values to the radio
+
+| Command | Description |
+|---|---|
+| `cat991a set frequency <MHz>` | Set VFO-A frequency in MHz |
+| `cat991a set mode <mode>` | Set operating mode |
+| `cat991a set shift <direction>` | Set repeater shift direction |
+| `cat991a set ctcss-mode <mode>` | Set CTCSS/tone-squelch mode |
+| `cat991a set ctcss-tone <Hz>` | Set CTCSS tone frequency |
+
+```bash
+$ cat991a set frequency 443.716
+Frequency set to 443.716000 MHz
+
+$ cat991a set mode FM
+Mode set to FM
+
+$ cat991a set shift +
+Shift set to +
+
+$ cat991a set ctcss-mode ENC
+CTCSS mode set to ENC
+
+$ cat991a set ctcss-tone 88.5
+CTCSS tone set to 88.5 Hz
+```
+
+**Valid modes:** `LSB`, `USB`, `CW`, `CW-R`, `AM`, `AM-N`, `FM`, `FM-N`, `RTTY-LSB`, `RTTY-USB`, `DATA-LSB`, `DATA-USB`, `DATA-FM`, `C4FM`
+
+**Valid shift directions:** `SIMPLEX`, `+`, `-`
+
+**Valid CTCSS modes:** `OFF`, `ENC` (encode only), `TSQL` (tone squelch — encode + decode)
+
+**Valid CTCSS tones (Hz):**
+```
+ 67.0   69.3   71.9   74.4   77.0   79.7   82.5   85.4   88.5   91.5
+ 94.8   97.4  100.0  103.5  107.2  110.9  114.8  118.8  123.0  127.3
+131.8  136.5  141.3  146.2  151.4  156.7  159.8  162.2  165.5  167.9
+171.3  173.8  177.3  179.9  183.5  186.2  189.9  192.8  196.6  199.5
+203.5  206.5  210.7  218.1  225.7  229.1  233.6  241.8  250.3  254.1
 ```
 
 ---
@@ -116,7 +170,7 @@ cat991a set mode -h
 - Run the command again with `--debug` to see the raw bytes being exchanged.
 - Make sure the radio is in VFO mode (not memory mode).
 - Confirm the baud rate in `~/.cat991a/config.json` matches **MENU > CAT RATE** on the radio.
-- On VHF/UHF, frequency changes must stay within the current band. Use `set frequency` to move to a frequency on the same band first if switching bands.
+- On VHF/UHF, frequency changes must stay within the current band. Use `set frequency` to move within the same band before switching bands.
 
 ---
 
@@ -124,10 +178,11 @@ cat991a set mode -h
 
 | CLI command | CAT command | Description |
 |---|---|---|
-| `get frequency` | `FA` | VFO-A frequency (Hz) |
-| `set frequency` | `FA` | VFO-A frequency (Hz) |
-| `get mode` | `MD0` | VFO-A operating mode |
-| `set mode` | `MD0` | VFO-A operating mode |
+| `get frequency` / `set frequency` | `FA` | VFO-A frequency (Hz) |
+| `get mode` / `set mode` | `MD0` | VFO-A operating mode |
+| `get shift` / `set shift` | `OS` | Repeater offset direction |
+| `get ctcss-mode` / `set ctcss-mode` | `CT` | CTCSS/tone-squelch mode |
+| `get ctcss-tone` / `set ctcss-tone` | `TN` | CTCSS tone number |
 
 ---
 
