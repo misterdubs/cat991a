@@ -2,7 +2,7 @@
 
 A command-line CAT control tool for the Yaesu FT-991A transceiver, written in Python.
 
-> **Work in progress.** Commands and behaviour may change as development continues.
+> **Work in progress.** Commands and behavior may change as development continues.
 
 > **macOS only.** This tool has only been tested on macOS. It may work on Linux or Windows, but that has not been verified.
 
