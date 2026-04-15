@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cat991a"
+version = "0.1.0"
+description = "CAT control CLI for the Yaesu FT-991A transceiver"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0",
+    "pyserial>=3.5",
+]
+
+[project.scripts]
+cat991a = "cat991a.cli:cli"
+
+[tool.setuptools.packages.find]
+where = ["."]
