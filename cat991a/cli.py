@@ -176,8 +176,11 @@ def get(ctx: click.Context, as_json: bool) -> None:
 
 
 @get.command("frequency", context_settings=CONTEXT_SETTINGS)
+@click.option("--hz", "use_hz", is_flag=True, default=False,
+              help="Display frequency in Hz instead of MHz.")
 @click.pass_context
-def get_frequency(ctx: click.Context) -> None:
+def get_frequency(ctx: click.Context, use_hz: bool) -> None:
+
     """Read the current VFO-A frequency.
 
     Sends the FA (VFO-A frequency) CAT command and prints the result in MHz.
@@ -201,9 +204,15 @@ def get_frequency(ctx: click.Context) -> None:
         raise click.ClickException(f"Connection error: {exc}")
 
     if ctx.obj.get("as_json"):
-        click.echo(json_mod.dumps({"frequency_mhz": freq_mhz}))
+        if use_hz:
+            click.echo(json_mod.dumps({"frequency_hz": round(freq_mhz * 1_000_000)}))
+        else:
+            click.echo(json_mod.dumps({"frequency_mhz": freq_mhz}))
+    elif use_hz:
+        click.echo(f"{round(freq_mhz * 1_000_000)} Hz")
     else:
         click.echo(f"{freq_mhz:.6f} MHz")
+
 
 
 @get.command("mode", context_settings=CONTEXT_SETTINGS)
