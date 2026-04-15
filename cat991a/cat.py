@@ -44,6 +44,32 @@ MODES: dict[str, str] = {
 # Reverse lookup: mode name (upper-cased) → radio code.
 MODE_CODES: dict[str, str] = {name: code for code, name in MODES.items()}
 
+# Repeater shift direction codes (OS command).
+SHIFTS: dict[str, str] = {
+    "0": "SIMPLEX",
+    "1": "+",
+    "2": "-",
+}
+SHIFT_CODES: dict[str, str] = {name: code for code, name in SHIFTS.items()}
+
+# CTCSS/tone-squelch mode codes (CT command).
+CTCSS_MODES: dict[str, str] = {
+    "0": "OFF",
+    "1": "ENC",       # encode only (transmit tone, open on any signal)
+    "2": "TSQL",      # tone squelch (encode + decode)
+}
+CTCSS_MODE_CODES: dict[str, str] = {name: code for code, name in CTCSS_MODES.items()}
+
+# Standard CTCSS tone frequencies in Hz, indexed by the 2-digit TN command value.
+# Indices 00–49 match the FT-991A tone table.
+CTCSS_TONES: list[float] = [
+     67.0,  69.3,  71.9,  74.4,  77.0,  79.7,  82.5,  85.4,  88.5,  91.5,
+     94.8,  97.4, 100.0, 103.5, 107.2, 110.9, 114.8, 118.8, 123.0, 127.3,
+    131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 159.8, 162.2, 165.5, 167.9,
+    171.3, 173.8, 177.3, 179.9, 183.5, 186.2, 189.9, 192.8, 196.6, 199.5,
+    203.5, 206.5, 210.7, 218.1, 225.7, 229.1, 233.6, 241.8, 250.3, 254.1,
+]
+
 
 class Radio:
     """Context-manager wrapper around a serial CAT connection.
@@ -266,16 +292,149 @@ class Radio:
                 f"Mode mismatch after set: sent {mode!r}, radio reports {actual!r}"
             )
 
+    def get_shift(self) -> str:
+        """Return the repeater shift direction ('SIMPLEX', '+', or '-').
+
+        CAT command: OS (Offset Shift)
+        """
+        code = self.command("OS")
+        if code not in SHIFTS:
+            raise CATError(f"Unknown shift code from radio: {code!r}")
+        return SHIFTS[code]
+
+    def set_shift(self, direction: str) -> None:
+        """Set the repeater shift direction and verify the radio accepted it.
+
+        CAT command: OS (Offset Shift)
+
+        Args:
+            direction: ``'SIMPLEX'``, ``'+'``, or ``'-'``. Case-insensitive.
+
+        Raises:
+            ValueError: if *direction* is not recognised.
+            CATError: if the radio rejects the command or the read-back
+                      does not match.
+        """
+        key = direction.upper()
+        if key not in SHIFT_CODES:
+            valid = ", ".join(SHIFT_CODES)
+            raise ValueError(f"Unknown shift {direction!r}. Valid: {valid}")
+
+        code = SHIFT_CODES[key]
+        self._serial.reset_input_buffer()
+        set_cmd = f"OS{code}"
+        self._send(set_cmd)
+        self._check_error_response(set_cmd)
+
+        actual = self.get_shift()
+        if actual.upper() != key:
+            raise CATError(
+                f"Shift mismatch after set: sent {direction!r}, "
+                f"radio reports {actual!r}"
+            )
+
+    def get_ctcss_mode(self) -> str:
+        """Return the CTCSS/tone-squelch mode ('OFF', 'ENC', or 'TSQL').
+
+        CAT command: CT (CTCSS mode)
+        """
+        code = self.command("CT")
+        if code not in CTCSS_MODES:
+            raise CATError(f"Unknown CTCSS mode code from radio: {code!r}")
+        return CTCSS_MODES[code]
+
+    def set_ctcss_mode(self, mode: str) -> None:
+        """Set the CTCSS mode and verify the radio accepted it.
+
+        CAT command: CT (CTCSS mode)
+
+        Args:
+            mode: ``'OFF'``, ``'ENC'`` (encode only), or ``'TSQL'``
+                  (encode + decode). Case-insensitive.
+
+        Raises:
+            ValueError: if *mode* is not recognised.
+            CATError: if the radio rejects the command or the read-back
+                      does not match.
+        """
+        key = mode.upper()
+        if key not in CTCSS_MODE_CODES:
+            valid = ", ".join(CTCSS_MODE_CODES)
+            raise ValueError(f"Unknown CTCSS mode {mode!r}. Valid: {valid}")
+
+        code = CTCSS_MODE_CODES[key]
+        self._serial.reset_input_buffer()
+        set_cmd = f"CT{code}"
+        self._send(set_cmd)
+        self._check_error_response(set_cmd)
+
+        actual = self.get_ctcss_mode()
+        if actual.upper() != key:
+            raise CATError(
+                f"CTCSS mode mismatch after set: sent {mode!r}, "
+                f"radio reports {actual!r}"
+            )
+
+    def get_ctcss_tone(self) -> float:
+        """Return the CTCSS tone frequency in Hz (e.g. 88.5).
+
+        CAT command: TN (Tone Number, 2-digit index into CTCSS_TONES)
+        """
+        raw = self.command("TN")
+        if not raw.isdigit() or not (0 <= int(raw) < len(CTCSS_TONES)):
+            raise CATError(f"Unexpected tone number from radio: {raw!r}")
+        return CTCSS_TONES[int(raw)]
+
+    def set_ctcss_tone(self, hz: float) -> None:
+        """Set the CTCSS tone by frequency and verify the radio accepted it.
+
+        CAT command: TN (Tone Number)
+
+        Args:
+            hz: CTCSS tone frequency in Hz, e.g. ``88.5``. Must exactly match
+                one of the 50 standard tones in ``CTCSS_TONES``.
+
+        Raises:
+            ValueError: if *hz* does not match a standard CTCSS tone.
+            CATError: if the radio rejects the command or the read-back
+                      does not match.
+        """
+        # Find matching tone within 0.1 Hz tolerance to handle float input.
+        index = next(
+            (i for i, t in enumerate(CTCSS_TONES) if abs(t - hz) < 0.1),
+            None,
+        )
+        if index is None:
+            valid = ", ".join(str(t) for t in CTCSS_TONES)
+            raise ValueError(
+                f"{hz} Hz is not a standard CTCSS tone. Valid tones: {valid}"
+            )
+
+        self._serial.reset_input_buffer()
+        set_cmd = f"TN{index:02d}"
+        self._send(set_cmd)
+        self._check_error_response(set_cmd)
+
+        actual = self.get_ctcss_tone()
+        if abs(actual - hz) >= 0.1:
+            raise CATError(
+                f"CTCSS tone mismatch after set: sent {hz} Hz, "
+                f"radio reports {actual} Hz"
+            )
+
     def get_status(self) -> dict:
         """Return a snapshot of key radio state over a single connection.
 
-        Queries frequency and mode in one session to avoid the overhead of
-        opening the serial port twice.
+        Queries all values in one session to avoid reopening the serial port.
 
         Returns:
-            Dict with keys ``frequency_mhz`` (float) and ``mode`` (str).
+            Dict with keys: ``frequency_mhz``, ``mode``, ``shift``,
+            ``ctcss_mode``, ``ctcss_tone_hz``.
         """
         return {
             "frequency_mhz": self.get_frequency(),
             "mode": self.get_mode(),
+            "shift": self.get_shift(),
+            "ctcss_mode": self.get_ctcss_mode(),
+            "ctcss_tone_hz": self.get_ctcss_tone(),
         }

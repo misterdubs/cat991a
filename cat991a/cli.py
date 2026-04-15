@@ -6,10 +6,16 @@ Commands
 
   get frequency       Read the current VFO-A frequency from the radio.
   get mode            Read the current operating mode.
-  get status          Read frequency and mode in a single query.
+  get shift           Read the repeater shift direction.
+  get ctcss-mode      Read the CTCSS/tone-squelch mode.
+  get ctcss-tone      Read the CTCSS tone frequency.
+  get status          Read all of the above in a single query.
 
   set frequency       Set the VFO-A frequency.
   set mode            Set the operating mode.
+  set shift           Set the repeater shift direction.
+  set ctcss-mode      Set the CTCSS/tone-squelch mode.
+  set ctcss-tone      Set the CTCSS tone frequency.
 
 Usage
 -----
@@ -30,7 +36,10 @@ import click
 from serial.tools import list_ports
 
 from . import config as cfg_mod
-from .cat import CATError, MODE_CODES, Radio
+from .cat import (
+    CTCSS_MODES, CTCSS_MODE_CODES, CTCSS_TONES,
+    CATError, MODE_CODES, SHIFT_CODES, Radio,
+)
 
 # Applied to every group and command so that both -h and --help work.
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
@@ -150,9 +159,12 @@ def get(ctx: click.Context, as_json: bool) -> None:
 
     \b
     Available items:
-      frequency   Current VFO-A frequency in MHz
-      mode        Current operating mode (e.g. FM, USB, CW)
-      status      Frequency and mode in one query
+      frequency    Current VFO-A frequency in MHz
+      mode         Current operating mode (e.g. FM, USB, CW)
+      shift        Repeater shift direction (SIMPLEX, +, -)
+      ctcss-mode   CTCSS mode (OFF, ENC, TSQL)
+      ctcss-tone   CTCSS tone frequency in Hz
+      status       All of the above in one query
 
     \b
     Add --json to get machine-readable output:
@@ -237,11 +249,13 @@ def get_status(ctx: click.Context) -> None:
     \b
     Examples:
         $ cat991a get status
-        Frequency: 443.716000 MHz
-        Mode:      FM
+        Frequency:  443.716000 MHz
+        Mode:       FM
+        Shift:      +
+        CTCSS:      ENC (88.5 Hz)
 
         $ cat991a get --json status
-        {"frequency_mhz": 443.716, "mode": "FM"}
+        {"frequency_mhz": 443.716, "mode": "FM", "shift": "+", ...}
     """
     try:
         radio_cfg = cfg_mod.require()
@@ -260,8 +274,108 @@ def get_status(ctx: click.Context) -> None:
     if ctx.obj.get("as_json"):
         click.echo(json_mod.dumps(status))
     else:
-        click.echo(f"Frequency: {status['frequency_mhz']:.6f} MHz")
-        click.echo(f"Mode:      {status['mode']}")
+        ctcss = status["ctcss_mode"]
+        if ctcss != "OFF":
+            ctcss = f"{ctcss} ({status['ctcss_tone_hz']} Hz)"
+        click.echo(f"Frequency:  {status['frequency_mhz']:.6f} MHz")
+        click.echo(f"Mode:       {status['mode']}")
+        click.echo(f"Shift:      {status['shift']}")
+        click.echo(f"CTCSS:      {ctcss}")
+
+
+@get.command("shift", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def get_shift(ctx: click.Context) -> None:
+    """Read the repeater shift direction.
+
+    \b
+    Example:
+        $ cat991a get shift
+        +
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            shift = radio.get_shift()
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"shift": shift}))
+    else:
+        click.echo(shift)
+
+
+@get.command("ctcss-mode", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def get_ctcss_mode(ctx: click.Context) -> None:
+    """Read the CTCSS/tone-squelch mode.
+
+    \b
+    OFF    CTCSS disabled
+    ENC    Encode only (transmit tone, open on any signal)
+    TSQL   Tone squelch (encode + decode)
+
+    \b
+    Example:
+        $ cat991a get ctcss-mode
+        ENC
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            mode = radio.get_ctcss_mode()
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"ctcss_mode": mode}))
+    else:
+        click.echo(mode)
+
+
+@get.command("ctcss-tone", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def get_ctcss_tone(ctx: click.Context) -> None:
+    """Read the CTCSS tone frequency in Hz.
+
+    \b
+    Example:
+        $ cat991a get ctcss-tone
+        88.5 Hz
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            tone = radio.get_ctcss_tone()
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"ctcss_tone_hz": tone}))
+    else:
+        click.echo(f"{tone} Hz")
 
 
 # ---------------------------------------------------------------------------
@@ -274,8 +388,11 @@ def set() -> None:
 
     \b
     Available items:
-      frequency   Set VFO-A frequency (MHz)
-      mode        Set operating mode (e.g. FM, USB, CW)
+      frequency    Set VFO-A frequency (MHz)
+      mode         Set operating mode (e.g. FM, USB, CW)
+      shift        Set repeater shift direction (SIMPLEX, +, -)
+      ctcss-mode   Set CTCSS mode (OFF, ENC, TSQL)
+      ctcss-tone   Set CTCSS tone by frequency in Hz (e.g. 88.5)
     """
 
 
@@ -344,3 +461,116 @@ def set_mode(ctx: click.Context, mode: str) -> None:
         raise click.ClickException(f"Connection error: {exc}")
 
     click.echo(f"Mode set to {mode.upper()}")
+
+
+@set.command("shift", context_settings=CONTEXT_SETTINGS)
+@click.argument("direction", metavar="DIRECTION",
+                type=click.Choice(list(SHIFT_CODES), case_sensitive=False))
+@click.pass_context
+def set_shift(ctx: click.Context, direction: str) -> None:
+    """Set the repeater shift direction to DIRECTION.
+
+    \b
+    Valid directions:
+      SIMPLEX   No offset (simplex operation)
+      +         Positive offset
+      -         Negative offset
+
+    \b
+    Examples:
+        $ cat991a set shift +
+        $ cat991a set shift SIMPLEX
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            radio.set_shift(direction)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    click.echo(f"Shift set to {direction.upper()}")
+
+
+@set.command("ctcss-mode", context_settings=CONTEXT_SETTINGS)
+@click.argument("mode", metavar="MODE",
+                type=click.Choice(list(CTCSS_MODE_CODES), case_sensitive=False))
+@click.pass_context
+def set_ctcss_mode(ctx: click.Context, mode: str) -> None:
+    """Set the CTCSS/tone-squelch mode to MODE.
+
+    \b
+    Valid modes:
+      OFF    Disable CTCSS
+      ENC    Encode only (transmit tone, open on any signal)
+      TSQL   Tone squelch (encode + decode)
+
+    \b
+    Examples:
+        $ cat991a set ctcss-mode ENC
+        $ cat991a set ctcss-mode OFF
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            radio.set_ctcss_mode(mode)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    click.echo(f"CTCSS mode set to {mode.upper()}")
+
+
+@set.command("ctcss-tone", context_settings=CONTEXT_SETTINGS)
+@click.argument("hz", metavar="HZ", type=float)
+@click.pass_context
+def set_ctcss_tone(ctx: click.Context, hz: float) -> None:
+    """Set the CTCSS tone to HZ.
+
+    HZ must match one of the 50 standard CTCSS tone frequencies.
+
+    \b
+    Common tones:
+      67.0  71.9  74.4  77.0  79.7  82.5  85.4  88.5  91.5  94.8
+      100.0 103.5 107.2 110.9 114.8 118.8 123.0 127.3 131.8 136.5
+      141.3 146.2 151.4 156.7 162.2 167.9 173.8 179.9 186.2 192.8
+      203.5 210.7 218.1 225.7 233.6 241.8 250.3
+
+    \b
+    Examples:
+        $ cat991a set ctcss-tone 88.5
+        $ cat991a set ctcss-tone 100.0
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            radio.set_ctcss_tone(hz)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    click.echo(f"CTCSS tone set to {hz} Hz")
