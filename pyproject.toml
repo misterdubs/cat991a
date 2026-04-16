@@ -15,5 +15,8 @@ dependencies = [
 [project.scripts]
 cat991a = "cat991a.cli:cli"
 
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+
 [tool.setuptools.packages.find]
 where = ["."]
