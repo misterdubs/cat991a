@@ -86,6 +86,7 @@ cat991a get --json frequency
 | `cat991a get status` | Frequency, mode, shift, and CTCSS in one query |
 | `cat991a get frequency` | VFO-A frequency in MHz |
 | `cat991a get mode` | Operating mode |
+| `cat991a get power` | RF power output level in watts |
 | `cat991a get shift` | Repeater shift direction |
 | `cat991a get ctcss-mode` | CTCSS/tone-squelch mode |
 | `cat991a get ctcss-tone` | CTCSS tone frequency in Hz |
@@ -94,6 +95,7 @@ cat991a get --json frequency
 $ cat991a get status
 Frequency:  443.716000 MHz
 Mode:       FM
+Power:      100 W
 Shift:      +
 CTCSS:      ENC (88.5 Hz)
 
@@ -102,6 +104,9 @@ $ cat991a get frequency
 
 $ cat991a get mode
 FM
+
+$ cat991a get power
+100 W
 
 $ cat991a get shift
 +
@@ -121,6 +126,7 @@ $ cat991a get ctcss-tone
 |---|---|
 | `cat991a set frequency <MHz>` | Set VFO-A frequency in MHz |
 | `cat991a set mode <mode>` | Set operating mode |
+| `cat991a set power <watts>` | Set RF power output level |
 | `cat991a set shift <direction>` | Set repeater shift direction |
 | `cat991a set ctcss-mode <mode>` | Set CTCSS/tone-squelch mode |
 | `cat991a set ctcss-tone <Hz>` | Set CTCSS tone frequency |
@@ -131,6 +137,9 @@ Frequency set to 443.716000 MHz
 
 $ cat991a set mode FM
 Mode set to FM
+
+$ cat991a set power 100
+Power set to 100 W
 
 $ cat991a set shift +
 Shift set to +
@@ -143,6 +152,8 @@ CTCSS tone set to 88.5 Hz
 ```
 
 **Valid modes:** `LSB`, `USB`, `CW`, `CW-R`, `AM`, `AM-N`, `FM`, `FM-N`, `RTTY-LSB`, `RTTY-USB`, `DATA-LSB`, `DATA-USB`, `DATA-FM`, `C4FM`
+
+**Valid power levels (W):** `5`–`100`. The radio itself caps this lower on VHF/UHF (e.g. 50W max on 144/430MHz) — a value out of range for the current band is rejected by the radio.
 
 **Valid shift directions:** `SIMPLEX`, `+`, `-`
 
@@ -180,6 +191,7 @@ CTCSS tone set to 88.5 Hz
 |---|---|---|
 | `get frequency` / `set frequency` | `FA` | VFO-A frequency (Hz) |
 | `get mode` / `set mode` | `MD0` | VFO-A operating mode |
+| `get power` / `set power` | `PC` | RF power output level (W) |
 | `get shift` / `set shift` | `OS` | Repeater offset direction |
 | `get ctcss-mode` / `set ctcss-mode` | `CT` | CTCSS/tone-squelch mode |
 | `get ctcss-tone` / `set ctcss-tone` | `TN` | CTCSS tone number |

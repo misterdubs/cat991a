@@ -21,18 +21,20 @@ FAKE_CONFIG = {
 }
 
 
-def make_mock_radio(*, frequency_mhz=443.716, mode="FM", shift="+",
-                    ctcss_mode="ENC", ctcss_tone_hz=88.5):
+def make_mock_radio(*, frequency_mhz=443.716, mode="FM", power_watts=100,
+                    shift="+", ctcss_mode="ENC", ctcss_tone_hz=88.5):
     """Return a mock Radio context manager with sensible defaults."""
     radio = MagicMock()
     radio.get_frequency.return_value = frequency_mhz
     radio.get_mode.return_value = mode
+    radio.get_power.return_value = power_watts
     radio.get_shift.return_value = shift
     radio.get_ctcss_mode.return_value = ctcss_mode
     radio.get_ctcss_tone.return_value = ctcss_tone_hz
     radio.get_status.return_value = {
         "frequency_mhz": frequency_mhz,
         "mode": mode,
+        "power_watts": power_watts,
         "shift": shift,
         "ctcss_mode": ctcss_mode,
         "ctcss_tone_hz": ctcss_tone_hz,
@@ -75,6 +77,13 @@ def test_set_shift_invalid_choice():
 def test_set_ctcss_mode_invalid_choice():
     runner = CliRunner()
     result = runner.invoke(cli, ["set", "ctcss-mode", "BADMODE"])
+    assert result.exit_code != 0
+    assert "Invalid value" in result.output
+
+
+def test_set_power_invalid_choice():
+    runner = CliRunner()
+    result = runner.invoke(cli, ["set", "power", "150"])
     assert result.exit_code != 0
     assert "Invalid value" in result.output
 
@@ -141,6 +150,45 @@ def test_get_frequency_json_hz_flag():
 
 
 # ---------------------------------------------------------------------------
+# get power / set power — output format
+# ---------------------------------------------------------------------------
+
+def test_get_power_plain():
+    runner = CliRunner()
+    radio = make_mock_radio(power_watts=100)
+    with patch("cat991a.cli.cfg_mod.require", return_value=FAKE_CONFIG), \
+         patch("cat991a.cli.Radio") as MockRadio:
+        MockRadio.from_config.return_value.__enter__.return_value = radio
+        result = runner.invoke(cli, ["get", "power"])
+    assert result.exit_code == 0
+    assert "100 W" in result.output
+
+
+def test_get_power_json():
+    runner = CliRunner()
+    radio = make_mock_radio(power_watts=50)
+    with patch("cat991a.cli.cfg_mod.require", return_value=FAKE_CONFIG), \
+         patch("cat991a.cli.Radio") as MockRadio:
+        MockRadio.from_config.return_value.__enter__.return_value = radio
+        result = runner.invoke(cli, ["get", "--json", "power"])
+    assert result.exit_code == 0
+    assert '"power_watts"' in result.output
+    assert "50" in result.output
+
+
+def test_set_power():
+    runner = CliRunner()
+    radio = make_mock_radio()
+    with patch("cat991a.cli.cfg_mod.require", return_value=FAKE_CONFIG), \
+         patch("cat991a.cli.Radio") as MockRadio:
+        MockRadio.from_config.return_value.__enter__.return_value = radio
+        result = runner.invoke(cli, ["set", "power", "75"])
+    assert result.exit_code == 0
+    assert "Power set to 75 W" in result.output
+    radio.set_power.assert_called_once_with(75)
+
+
+# ---------------------------------------------------------------------------
 # get status — output format
 # ---------------------------------------------------------------------------
 
@@ -154,6 +202,7 @@ def test_get_status_plain():
     assert result.exit_code == 0
     assert "443.716000 MHz" in result.output
     assert "FM" in result.output
+    assert "Power:      100 W" in result.output
     assert "ENC (88.5 Hz)" in result.output
 
 

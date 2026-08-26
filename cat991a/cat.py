@@ -292,6 +292,46 @@ class Radio:
                 f"Mode mismatch after set: sent {mode!r}, radio reports {actual!r}"
             )
 
+    def get_power(self) -> int:
+        """Return the RF power output level in watts.
+
+        CAT command: PC (3-digit value, 005-100)
+        """
+        raw = self.command("PC")
+        if not raw.isdigit():
+            raise CATError(f"Unexpected power response: {raw!r}")
+        return int(raw)
+
+    def set_power(self, watts: int) -> None:
+        """Set the RF power output level and verify the radio accepted it.
+
+        CAT command: PC (3-digit value, 005-100)
+
+        Args:
+            watts: RF power in watts, 5-100. Note the radio itself caps this
+                   lower on VHF/UHF bands (e.g. 50W max on 144/430MHz); a
+                   value that is out of range for the current band is
+                   rejected by the radio, not by this method.
+
+        Raises:
+            ValueError: if *watts* is outside the 5-100 range.
+            CATError: if the radio rejects the command or the read-back
+                      does not match the requested value.
+        """
+        if not (5 <= watts <= 100):
+            raise ValueError(f"Power must be between 5 and 100 watts, got {watts}")
+
+        self._serial.reset_input_buffer()
+        set_cmd = f"PC{watts:03d}"
+        self._send(set_cmd)
+        self._check_error_response(set_cmd)
+
+        actual = self.get_power()
+        if actual != watts:
+            raise CATError(
+                f"Power mismatch after set: sent {watts}W, radio reports {actual}W"
+            )
+
     def get_shift(self) -> str:
         """Return the repeater shift direction ('SIMPLEX', '+', or '-').
 
@@ -428,12 +468,13 @@ class Radio:
         Queries all values in one session to avoid reopening the serial port.
 
         Returns:
-            Dict with keys: ``frequency_mhz``, ``mode``, ``shift``,
-            ``ctcss_mode``, ``ctcss_tone_hz``.
+            Dict with keys: ``frequency_mhz``, ``mode``, ``power_watts``,
+            ``shift``, ``ctcss_mode``, ``ctcss_tone_hz``.
         """
         return {
             "frequency_mhz": self.get_frequency(),
             "mode": self.get_mode(),
+            "power_watts": self.get_power(),
             "shift": self.get_shift(),
             "ctcss_mode": self.get_ctcss_mode(),
             "ctcss_tone_hz": self.get_ctcss_tone(),
