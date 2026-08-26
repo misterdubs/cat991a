@@ -136,6 +136,11 @@ def test_get_ctcss_tone():
     assert radio.get_ctcss_tone() == 88.5
 
 
+def test_get_power():
+    radio, _ = make_radio("PC100;")
+    assert radio.get_power() == 100
+
+
 # ---------------------------------------------------------------------------
 # Radio.set_* — invalid input raises ValueError before touching serial
 # ---------------------------------------------------------------------------
@@ -162,6 +167,18 @@ def test_set_ctcss_tone_invalid_raises():
     radio, _ = make_radio()
     with pytest.raises(ValueError, match="not a standard CTCSS tone"):
         radio.set_ctcss_tone(55.0)  # below 67.0 Hz, the lowest standard tone
+
+
+def test_set_power_too_low_raises():
+    radio, _ = make_radio()
+    with pytest.raises(ValueError, match="between 5 and 100"):
+        radio.set_power(1)
+
+
+def test_set_power_too_high_raises():
+    radio, _ = make_radio()
+    with pytest.raises(ValueError, match="between 5 and 100"):
+        radio.set_power(150)
 
 
 def test_set_ctcss_tone_fuzzy_match():
@@ -202,3 +219,20 @@ def test_set_ctcss_tone_command_format(mock_sleep):
     radio.set_ctcss_tone(88.5)
     sent = [call.args[0] for call in mock_serial.write.call_args_list]
     assert b"TN08;" in sent
+
+
+@patch("time.sleep")
+def test_set_power_command_format(mock_sleep):
+    """set_power sends the correct 3-digit PC command."""
+    radio, mock_serial = make_radio("PC050;")  # read-back response
+    radio.set_power(50)
+    sent = [call.args[0] for call in mock_serial.write.call_args_list]
+    assert b"PC050;" in sent
+
+
+@patch("time.sleep")
+def test_set_power_mismatch_raises(mock_sleep):
+    """A read-back that doesn't match the requested power raises CATError."""
+    radio, _ = make_radio("PC050;")  # radio reports 50W after requesting 100W
+    with pytest.raises(CATError, match="Power mismatch"):
+        radio.set_power(100)

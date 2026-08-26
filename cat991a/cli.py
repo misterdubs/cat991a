@@ -6,6 +6,7 @@ Commands
 
   get frequency       Read the current VFO-A frequency from the radio.
   get mode            Read the current operating mode.
+  get power           Read the RF power output level.
   get shift           Read the repeater shift direction.
   get ctcss-mode      Read the CTCSS/tone-squelch mode.
   get ctcss-tone      Read the CTCSS tone frequency.
@@ -13,6 +14,7 @@ Commands
 
   set frequency       Set the VFO-A frequency.
   set mode            Set the operating mode.
+  set power           Set the RF power output level.
   set shift           Set the repeater shift direction.
   set ctcss-mode      Set the CTCSS/tone-squelch mode.
   set ctcss-tone      Set the CTCSS tone frequency.
@@ -161,6 +163,7 @@ def get(ctx: click.Context, as_json: bool) -> None:
     Available items:
       frequency    Current VFO-A frequency in MHz
       mode         Current operating mode (e.g. FM, USB, CW)
+      power        RF power output level in watts
       shift        Repeater shift direction (SIMPLEX, +, -)
       ctcss-mode   CTCSS mode (OFF, ENC, TSQL)
       ctcss-tone   CTCSS tone frequency in Hz
@@ -247,6 +250,38 @@ def get_mode(ctx: click.Context) -> None:
         click.echo(mode)
 
 
+@get.command("power", context_settings=CONTEXT_SETTINGS)
+@click.pass_context
+def get_power(ctx: click.Context) -> None:
+    """Read the current RF power output level in watts.
+
+    Sends the PC (RF power) CAT command and prints the result.
+
+    \b
+    Example:
+        $ cat991a get power
+        100 W
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            watts = radio.get_power()
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    if ctx.obj.get("as_json"):
+        click.echo(json_mod.dumps({"power_watts": watts}))
+    else:
+        click.echo(f"{watts} W")
+
+
 @get.command("status", context_settings=CONTEXT_SETTINGS)
 @click.pass_context
 def get_status(ctx: click.Context) -> None:
@@ -260,6 +295,7 @@ def get_status(ctx: click.Context) -> None:
         $ cat991a get status
         Frequency:  443.716000 MHz
         Mode:       FM
+        Power:      100 W
         Shift:      +
         CTCSS:      ENC (88.5 Hz)
 
@@ -288,6 +324,7 @@ def get_status(ctx: click.Context) -> None:
             ctcss = f"{ctcss} ({status['ctcss_tone_hz']} Hz)"
         click.echo(f"Frequency:  {status['frequency_mhz']:.6f} MHz")
         click.echo(f"Mode:       {status['mode']}")
+        click.echo(f"Power:      {status['power_watts']} W")
         click.echo(f"Shift:      {status['shift']}")
         click.echo(f"CTCSS:      {ctcss}")
 
@@ -399,6 +436,7 @@ def set() -> None:
     Available items:
       frequency    Set VFO-A frequency (MHz)
       mode         Set operating mode (e.g. FM, USB, CW)
+      power        Set RF power output level (watts)
       shift        Set repeater shift direction (SIMPLEX, +, -)
       ctcss-mode   Set CTCSS mode (OFF, ENC, TSQL)
       ctcss-tone   Set CTCSS tone by frequency in Hz (e.g. 88.5)
@@ -470,6 +508,40 @@ def set_mode(ctx: click.Context, mode: str) -> None:
         raise click.ClickException(f"Connection error: {exc}")
 
     click.echo(f"Mode set to {mode.upper()}")
+
+
+@set.command("power", context_settings=CONTEXT_SETTINGS)
+@click.argument("watts", metavar="WATTS", type=click.IntRange(5, 100))
+@click.pass_context
+def set_power(ctx: click.Context, watts: int) -> None:
+    """Set the RF power output level to WATTS.
+
+    WATTS must be between 5 and 100. Note the radio itself caps this lower
+    on VHF/UHF bands (e.g. 50W max on 144/430MHz) — a value out of range
+    for the current band is rejected by the radio.
+
+    \b
+    Examples:
+        $ cat991a set power 100
+        $ cat991a set power 50
+    """
+    try:
+        radio_cfg = cfg_mod.require()
+    except RuntimeError as exc:
+        raise click.ClickException(str(exc))
+
+    debug = ctx.obj.get("debug", False)
+    try:
+        with Radio.from_config(radio_cfg, debug=debug) as radio:
+            radio.set_power(watts)
+    except ValueError as exc:
+        raise click.ClickException(str(exc))
+    except CATError as exc:
+        raise click.ClickException(f"CAT error: {exc}")
+    except Exception as exc:
+        raise click.ClickException(f"Connection error: {exc}")
+
+    click.echo(f"Power set to {watts} W")
 
 
 @set.command("shift", context_settings=CONTEXT_SETTINGS)
